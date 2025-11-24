@@ -1,37 +1,69 @@
 #include "net_utils.h"
-
+#include <ArduinoJson.h>
 #include <ESPping.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <sstream>
 
-bool internetConnection() { return Ping.ping(IPAddress(8, 8, 8, 8)); }
 
+bool internetConnection() {
+    if (Ping.ping("api.mxin.moe")) { return true; }
+    return Ping.ping(IPAddress(114, 114, 114, 114));
+}
+const String PROXY_HOST = "http://18.218.8.189:5000";
 String getManufacturer(const String &mac) {
-    if (!internetConnection()) { return "NO_INTERNET_ACCESS"; }
-
-    // there is an official(IEEE) doc that contains all registered mac prefixes
-    // but it is around 700kb and i don't know a way to get specific part
-    // without downloading the whole txt
-    HTTPClient http;
-    http.begin("http://api.maclookup.app/v2/macs/" + mac);
-    int httpCode = http.GET(); // Send the request
-    if (httpCode != 200) {
-        http.end();
-        return "GET failed";
+    // 0. 基础检查：没连网就别费劲了
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[MAC] No WiFi connection");
+        return "NO_WIFI";
     }
 
-    // payload is a json of the format
-    // {"success":true,"found":true,"macPrefix":"2C3358","company":"Intel Corporate","address":"Lot 8, Jalan
-    // Hi-Tech 2/3, Kulim Kedah 09000,
-    // MY","country":"MY","blockStart":"2C3358000000","blockEnd":"2C3358FFFFFF","blockSize":16777215,"blockType":"MA-L","updated":"2021-10-13","isRand":false,"isPrivate":false}
-    // company field is going to be empty if none found
-    String payload{http.getString()};
-    size_t company_start_idx = payload.indexOf("company") + 10; // + 7(company) + 3(":")
-    String manufacturer = payload.substring(company_start_idx, payload.indexOf('"', company_start_idx));
-    if (manufacturer.isEmpty()) return "UNKNOWN";
+    // 1. 拼接 URL：直接找你的 AWS 代理
+    // 格式: http://18.218.8.189:5000/query?mac=AA:BB:CC:DD:EE:FF
+    String url = PROXY_HOST + "/query?mac=" + mac;
 
-    return manufacturer;
+    Serial.printf("[MAC] Proxy Request: %s\n", url.c_str());
+
+    // 2. 创建最普通的 HTTP 客户端 (非加密，极速，不占 RAM)
+    WiFiClient client;
+    HTTPClient http;
+
+    // 设置超时 (3秒足够了，EC2 响应很快)
+    http.setTimeout(3000);
+
+    // 3. 发起连接
+    // 注意：这里用的是 http.begin(client, url)
+    if (!http.begin(client, url)) {
+        Serial.println("[MAC] Connect Proxy Failed");
+        return "PROXY_ERR";
+    }
+
+    // 4. 发送 GET 请求
+    int httpCode = http.GET();
+    Serial.printf("[MAC] Code: %d\n", httpCode);
+
+    String result = "UNKNOWN";
+
+    if (httpCode == HTTP_CODE_OK) { // Code 200
+        // 成功！EC2 已经把 "Huizhou Gaoshengda..." 这种纯文本发回来了
+        result = http.getString();
+        result.trim(); // 去掉可能存在的换行符
+        Serial.printf("[MAC] Vendor: %s\n", result.c_str());
+
+        // 防错截断：防止返回太长撑爆屏幕
+        if (result.length() > 32) {
+            result = result.substring(0, 32);
+        }
+    } else {
+        // 打印错误原因
+        Serial.printf("[MAC] HTTP Err: %s\n", http.errorToString(httpCode).c_str());
+
+        if (httpCode == 500) result = "SERVER_ERR"; // Python 脚本报错
+        if (httpCode == 404) result = "NOT_FOUND";  // 数据库里没这个 MAC
+    }
+
+    http.end();
+    return result;
 }
 
 String MAC(uint8_t *data) {

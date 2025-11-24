@@ -628,7 +628,7 @@ void addMifareKeyMenu() {
 **  Function: setClock
 **  Handles Menu to set timezone to NTP
 **********************************************************************/
-const char *ntpServer = "pool.ntp.org";
+const char *ntpServer = "ntp.aliyun.com";
 long selectedTimezone;
 const int daylightOffset_sec = 0;
 int timeHour;
