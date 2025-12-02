@@ -4,8 +4,11 @@
 
 ![WT2IRAO@Y4$A(K%8FQ6AV$7](https://github.com/user-attachments/assets/f5da3fff-a379-4a27-9374-7d52702e7d79)
 修复方式是这样的：
+
 1、在main.cpp中添加了对g33引脚的直接控制，强行拉高，让设备选中SD卡。
+
 2、在\m5stack-cplus2\SmartRC-CC1101-Driver-Lib\ELECHOUSE_CC1101_SRC_DRV.cpp里，把checkMISO()改为永远返回true。
+
 The repair method is as follows:
 1. Added direct control of the g33 pin in main.cpp, forcibly pulling it high to select the SD card.
 2. In \m5stack-cplus2\SmartRC-CC1101-Driver-Lib\ELECHOUSE_CC1101_SRC_DRV.cpp, change checkMISO() to always return true.
