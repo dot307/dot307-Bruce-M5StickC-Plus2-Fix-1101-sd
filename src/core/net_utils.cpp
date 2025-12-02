@@ -4,56 +4,45 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <sstream>
-
-
+// 以下修复了通过mac地址查询厂商时，因esp32内存不足无法进行https请求的问题
+// 通过连接到自己服务器上的一个flask脚本来查询，查询到的结果再返回给esp32
 bool internetConnection() {
     if (Ping.ping("api.mxin.moe")) { return true; }
     return Ping.ping(IPAddress(114, 114, 114, 114));
 }
-const String PROXY_HOST = "http://18.218.8.189:5000";
+const String PROXY_HOST =
+    ""; // 需要填写一个你自己的服务器地址，然后这个服务器上用来跑一个flask脚本就可以解决了。
 String getManufacturer(const String &mac) {
-    // 0. 基础检查：没连网就别费劲了
+
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[MAC] No WiFi connection");
         return "NO_WIFI";
     }
-
-    // 1. 拼接 URL：直接找你的 AWS 代理
-    // 格式: http://18.218.8.189:5000/query?mac=AA:BB:CC:DD:EE:FF
     String url = PROXY_HOST + "/query?mac=" + mac;
 
     Serial.printf("[MAC] Proxy Request: %s\n", url.c_str());
 
-    // 2. 创建最普通的 HTTP 客户端 (非加密，极速，不占 RAM)
     WiFiClient client;
     HTTPClient http;
-
-    // 设置超时 (3秒足够了，EC2 响应很快)
     http.setTimeout(3000);
 
-    // 3. 发起连接
-    // 注意：这里用的是 http.begin(client, url)
     if (!http.begin(client, url)) {
         Serial.println("[MAC] Connect Proxy Failed");
         return "PROXY_ERR";
     }
 
-    // 4. 发送 GET 请求
     int httpCode = http.GET();
     Serial.printf("[MAC] Code: %d\n", httpCode);
 
     String result = "UNKNOWN";
 
-    if (httpCode == HTTP_CODE_OK) { // Code 200
-        // 成功！EC2 已经把 "Huizhou Gaoshengda..." 这种纯文本发回来了
+    if (httpCode == HTTP_CODE_OK) {
+
         result = http.getString();
         result.trim(); // 去掉可能存在的换行符
         Serial.printf("[MAC] Vendor: %s\n", result.c_str());
 
-        // 防错截断：防止返回太长撑爆屏幕
-        if (result.length() > 32) {
-            result = result.substring(0, 32);
-        }
+        if (result.length() > 32) { result = result.substring(0, 32); }
     } else {
         // 打印错误原因
         Serial.printf("[MAC] HTTP Err: %s\n", http.errorToString(httpCode).c_str());

@@ -9,6 +9,11 @@
 #include <functional>
 #include <string>
 #include <vector>
+//----------------------------------------------------------------
+#include <Arduino.h>
+#include <SD.h>
+#include <SPI.h>
+//----------------------------------------------------------------
 io_expander ioExpander;
 BruceConfig bruceConfig;
 BruceConfigPins bruceConfigPins;
@@ -393,6 +398,43 @@ void setup() {
     bruceConfig.bright = 100; // theres is no value yet
     bruceConfig.rotation = ROTATION;
     setup_gpio();
+    // ==========================================
+    // 以下修复了在使用了三极管控制SD卡和RF模块共用SPI总线时，
+    // 在某些情况下（如开机时）RF模块无法正确释放SPI总线的问题，
+    // 通过在开机时手动控制引脚来确保RF模块正确释放SPI总线，
+    // 从而避免了RF模块占用SPI总线导致SD卡无法初始化的问题。
+    // 主要通过控制33引脚（接三极管BASE级），手动调整33引脚的电平，
+    // 来使得SD卡处于被选中状态（g33=high）。
+    // 前面的for循环是用来通过时钟信号保证上一次sd卡卡住的数据传输完成。
+    // 但在实际测试中，发现就算这样，c1101还是会因为checkMISO失败而无法实现，
+    // 所以直接屏蔽掉了checkMISO的等待环节。这个文件具体在：
+    //\m5stack-cplus2\SmartRC-CC1101-Driver-Lib\ELECHOUSE_CC1101_SRC_DRV.cpp
+    // 因为在CC1101里，miso高电平代表着CC1101忙碌中，但实际上，
+    // miso高电平可能是因为sd卡占用了总线，所以我们可以屏蔽掉，因为1101自己会拉低g33
+    // 来选中自己。
+    // ==========================================
+
+    int pin_shared_ctrl = 33; // g33控制引脚（接三极管BASE级）
+    int pin_sck = 0;          // 时钟脚
+    // 1. 初始化控制脚
+    pinMode(pin_shared_ctrl, OUTPUT);
+    digitalWrite(pin_shared_ctrl, HIGH);
+    delay(10);
+    pinMode(pin_sck, OUTPUT);
+    for (int i = 0; i < 80; i++) {
+        digitalWrite(pin_sck, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(pin_sck, LOW);
+        delayMicroseconds(10);
+    }
+    digitalWrite(pin_shared_ctrl, LOW); // 选中 RF (SD 禁用)
+    delay(10);
+    digitalWrite(pin_shared_ctrl, HIGH); // 再次选中 SD
+    delay(10);
+
+    digitalWrite(pin_shared_ctrl, HIGH);
+
+// ==========================================
 #if defined(HAS_SCREEN)
     tft.init();
     tft.setRotation(bruceConfig.rotation);
@@ -404,6 +446,7 @@ void setup() {
     tft.begin();
 #endif
     begin_storage();
+
     begin_tft();
     init_clock();
     init_led();
