@@ -1,9 +1,9 @@
 # 关于修复了啥
-这个是基于Bruce那张天才的接线图实现了如何共用1101和sd卡模块，但是还是会出现模块冲突的问题（比如开机后需要先打开一次sd卡才能打开rf），于是就做了一些修改。
+这个是在通过Bruce原作者的天才接线图实现了如何共用1101和sd卡模块后，还是会出现模块冲突的问题（比如开机后需要先打开一次sd卡才能打开rf）。所以我就做了一些修改。
 另外，还修改了在scan里不能通过mac地址查询厂商的bug（原因在于内存太小了，而现在查询的api都是走的https协议。。），所以我就改成了让我的服务器跑一个flask脚本，然后查完了再传给esp32。
 
 ![WT2IRAO@Y4$A(K%8FQ6AV$7](https://github.com/user-attachments/assets/f5da3fff-a379-4a27-9374-7d52702e7d79)
-
+官方原库：[Bruce](https://github.com/pr3y/Bruce)
 # 以下是官方介绍：
 ![Bruce Main Menu](./media/pictures/bruce_banner.jpg)
 
